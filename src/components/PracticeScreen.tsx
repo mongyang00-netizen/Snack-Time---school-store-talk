@@ -20,7 +20,7 @@ import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { evaluateSpokenTextLocally } from '../utils/speechEvaluation';
 import { soundFX } from '../utils/soundEffects';
-import clerkAvatarImg from '../assets/images/clerk_alex_avatar_1792748995919.jpg';
+import clerkAvatarImg from '../assets/images/clerk_alex_female_avatar_1793100302805.jpg';
 
 interface PracticeScreenProps {
   currentTurn: DialogueTurn;
@@ -338,7 +338,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
         {/* Store Clerk Alex & Authentic Speech Bubble */}
         <div className="flex items-start gap-3 md:gap-4 relative">
-          {/* Clerk Alex Avatar (Unified male character in blue apron) */}
+          {/* Clerk Alex Avatar (Unified female character in blue apron) */}
           <div className="flex flex-col items-center shrink-0">
             <div className="relative">
               <div

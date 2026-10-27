@@ -1,7 +1,7 @@
 import React from 'react';
 import { ShoppingBag, Sparkles, Volume2, Mic, ArrowRight, ShieldCheck, Heart } from 'lucide-react';
 import { soundFX } from '../utils/soundEffects';
-import schoolStoreHeroImg from '../assets/images/school_store_alex_unified_1793091287604.jpg';
+import schoolStoreHeroImg from '../assets/images/school_store_hero_female_1793100302985.jpg';
 
 interface StartScreenProps {
   onStartShopping: () => void;

@@ -1,56 +1,94 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const SELECTED_VOICE_STORAGE_KEY = 'school_store_alex_voice_uri';
+
 export function useSpeechSynthesis() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [selectedVoiceURI, setSelectedVoiceURIState] = useState<string>(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return localStorage.getItem(SELECTED_VOICE_STORAGE_KEY) || '';
+    }
+    return '';
+  });
+
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Helper to find the best male voice for store clerk Alex with browser consistency
-  const findAlexMaleVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined => {
+  // Helper to find natural and friendly American English (en-US) female voice for store clerk Alex
+  const findAlexFemaleVoice = useCallback((availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined => {
+    const enUsVoices = availableVoices.filter((v) => v.lang === 'en-US' || v.lang === 'en_US');
     const enVoices = availableVoices.filter((v) => v.lang.startsWith('en'));
-    if (!enVoices.length) return availableVoices[0];
+
+    const searchPool = enUsVoices.length ? enUsVoices : enVoices;
+    if (!searchPool.length) return availableVoices[0];
 
     const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const isChrome = typeof navigator !== 'undefined' && /chrome|chromium|crios/i.test(navigator.userAgent) && !/edge|edg/i.test(navigator.userAgent);
 
     if (isSafari) {
-      // Safari / macOS / iOS: Daniel, Alex, Oliver, or en-US/en-GB male voices
-      const safariKeys = ['daniel', 'alex', 'oliver', 'fred', 'george', 'aaron', 'male'];
+      // Safari / macOS / iOS natural en-US female voices
+      const safariKeys = ['samantha', 'victoria', 'allison', 'ava', 'susan', 'karen', 'zoe', 'female'];
       for (const kw of safariKeys) {
-        const match = enVoices.find((v) => v.name.toLowerCase().includes(kw));
+        const match = searchPool.find((v) => v.name.toLowerCase().includes(kw));
         if (match) return match;
       }
     } else if (isChrome) {
-      // Chrome: Google UK English Male, Microsoft Guy, Microsoft David, or male
-      const chromeKeys = ['google uk english male', 'guy', 'david', 'mark', 'alex', 'male', 'tom'];
+      // Chrome natural en-US female voices
+      const chromeKeys = ['google us english', 'zira', 'jenny', 'aria', 'samantha', 'female'];
       for (const kw of chromeKeys) {
-        const match = enVoices.find((v) => v.name.toLowerCase().includes(kw));
+        const match = searchPool.find((v) => v.name.toLowerCase().includes(kw));
         if (match) return match;
       }
     }
 
-    const maleKeywords = [
-      'alex',
-      'david',
-      'guy',
-      'mark',
-      'daniel',
-      'fred',
-      'george',
-      'male',
-      'tom',
-      'aaron',
-      'oliver',
+    const femaleKeywords = [
+      'samantha',
+      'zira',
+      'jenny',
+      'aria',
+      'victoria',
+      'allison',
+      'ava',
+      'susan',
+      'karen',
+      'zoe',
+      'female',
     ];
 
-    for (const kw of maleKeywords) {
-      const match = enVoices.find((v) => v.name.toLowerCase().includes(kw));
+    for (const kw of femaleKeywords) {
+      const match = searchPool.find((v) => v.name.toLowerCase().includes(kw));
       if (match) return match;
     }
 
-    return enVoices.find((v) => v.lang === 'en-US') || enVoices[0];
-  };
+    return searchPool.find((v) => v.lang === 'en-US') || searchPool[0];
+  }, []);
+
+  const getActiveVoice = useCallback((): SpeechSynthesisVoice | null => {
+    const currentVoices = voicesRef.current;
+    if (!currentVoices.length) return null;
+
+    if (selectedVoiceURI) {
+      const found = currentVoices.find((v) => v.voiceURI === selectedVoiceURI || v.name === selectedVoiceURI);
+      if (found) return found;
+    }
+    return findAlexFemaleVoice(currentVoices) || null;
+  }, [selectedVoiceURI, findAlexFemaleVoice]);
+
+  const setSelectedVoiceURI = useCallback((uri: string) => {
+    setSelectedVoiceURIState(uri);
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (uri) {
+        localStorage.setItem(SELECTED_VOICE_STORAGE_KEY, uri);
+      } else {
+        localStorage.removeItem(SELECTED_VOICE_STORAGE_KEY);
+      }
+    }
+  }, []);
+
+  const resetVoiceToDefault = useCallback(() => {
+    setSelectedVoiceURI('');
+  }, [setSelectedVoiceURI]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -68,7 +106,6 @@ export function useSpeechSynthesis() {
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
 
-    // Periodic check for async voice loading in Chrome/Safari
     const timer = setInterval(loadVoices, 200);
     setTimeout(() => clearInterval(timer), 3000);
 
@@ -108,24 +145,11 @@ export function useSpeechSynthesis() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
       utterance.rate = rate; // 0.9 for normal, 0.7 for slow
+      utterance.pitch = 1.0; // Standard natural pitch without artificial shift per requirements
 
-      const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-      const isChrome = typeof navigator !== 'undefined' && /chrome|chromium|crios/i.test(navigator.userAgent) && !/edge|edg/i.test(navigator.userAgent);
-
-      // Calibrate pitch per browser:
-      // Safari voices can sound too deep at low pitch; set 1.05 for warm natural male tone.
-      // Chrome default voices can sound neutral/flat; set 1.05 for engaging clerk warmth.
-      if (isSafari) {
-        utterance.pitch = 1.05;
-      } else if (isChrome) {
-        utterance.pitch = 1.05;
-      } else {
-        utterance.pitch = 1.0;
-      }
-
-      const maleVoice = findAlexMaleVoice(currentVoices);
-      if (maleVoice) {
-        utterance.voice = maleVoice;
+      const femaleVoice = getActiveVoice();
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
       }
 
       utterance.onstart = () => {
@@ -151,14 +175,37 @@ export function useSpeechSynthesis() {
 
       window.speechSynthesis.speak(utterance);
     },
-    []
+    [getActiveVoice]
   );
+
+  const previewVoice = useCallback((voice: SpeechSynthesisVoice, text?: string) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+
+    const sampleText = text || "Hi! I'm Alex. What would you like?";
+    const utterance = new SpeechSynthesisUtterance(sampleText);
+    utterance.voice = voice;
+    utterance.lang = voice.lang || 'en-US';
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+
+    window.speechSynthesis.speak(utterance);
+  }, []);
 
   return {
     isSpeaking,
     speak,
     stop,
     voices,
+    activeVoice: getActiveVoice(),
+    selectedVoiceURI,
+    setSelectedVoiceURI,
+    resetVoiceToDefault,
+    previewVoice,
     isSupported: typeof window !== 'undefined' && 'speechSynthesis' in window,
   };
 }
