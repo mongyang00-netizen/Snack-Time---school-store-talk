@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { DIALOGUE_DATA, TurnRecord } from '../data/dialogueData';
 import { soundFX } from '../utils/soundEffects';
+import shoppingBagImg from '../assets/images/shopping_bag_snacks_1792748997508.jpg';
 
 interface ResultScreenProps {
   records: TurnRecord[];
@@ -77,7 +78,7 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
         {/* Shopping bag illustration */}
         <div className="w-48 h-48 md:w-56 md:h-56 mx-auto my-4 rounded-3xl overflow-hidden shadow-md border-2 border-amber-200 bg-amber-50">
           <img
-            src="/src/assets/images/shopping_bag_snacks_1792748997508.jpg"
+            src={shoppingBagImg}
             alt="School store shopping bag with snacks"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"

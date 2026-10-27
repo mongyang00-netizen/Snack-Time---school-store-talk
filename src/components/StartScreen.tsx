@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShoppingBag, Sparkles, Volume2, Mic, ArrowRight, ShieldCheck, Heart } from 'lucide-react';
 import { soundFX } from '../utils/soundEffects';
+import schoolStoreHeroImg from '../assets/images/school_store_alex_unified_1793091287604.jpg';
 
 interface StartScreenProps {
   onStartShopping: () => void;
@@ -28,7 +29,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({ onStartShopping }) => 
       <div className="w-full bg-white rounded-3xl p-4 md:p-6 shadow-sm border border-amber-200/90 text-center mb-6">
         <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden mb-4 bg-amber-50 shadow-inner border border-amber-100">
           <img
-            src="/src/assets/images/school_store_alex_unified_1793091287604.jpg"
+            src={schoolStoreHeroImg}
             alt="School store counter with friendly clerk Alex and delicious snacks"
             referrerPolicy="no-referrer"
             className="w-full h-full object-cover"

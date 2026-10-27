@@ -20,6 +20,7 @@ import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { evaluateSpokenTextLocally } from '../utils/speechEvaluation';
 import { soundFX } from '../utils/soundEffects';
+import clerkAvatarImg from '../assets/images/clerk_alex_avatar_1792748995919.jpg';
 
 interface PracticeScreenProps {
   currentTurn: DialogueTurn;
@@ -346,7 +347,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
                 }`}
               >
                 <img
-                  src="/src/assets/images/clerk_alex_avatar_1792748995919.jpg"
+                  src={clerkAvatarImg}
                   alt="Store Clerk Alex"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
