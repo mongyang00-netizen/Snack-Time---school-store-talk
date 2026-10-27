@@ -133,15 +133,7 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer Info */}
-      <footer className="w-full py-4 px-4 border-t border-amber-200/50 bg-amber-50/50 text-center text-xs text-slate-500">
-        <p>
-          Snack Time! — School Store Talk
-        </p>
-        <p className="text-[11px] text-slate-400 mt-0.5">
-          Student ID: 2024311915 · 홍지윤
-        </p>
-      </footer>
+
 
       {/* Modals */}
       <BrowserNoticeModal
