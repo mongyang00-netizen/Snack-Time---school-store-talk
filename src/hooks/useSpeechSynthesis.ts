@@ -147,11 +147,10 @@ export function useSpeechSynthesis() {
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
       );
 
-      // In iOS (Safari), small rate adjustments like 0.7 may not sound noticeably different due to WebKit TTS implementation.
-      // Per requirements: For iOS environment specifically, adjust slow rate (< 0.85) to 0.5.
+      // Per user request: For iOS environment specifically, try slow rate (< 0.85) at 0.6.
       let adjustedRate = rate;
       if (isIOS && rate < 0.85) {
-        adjustedRate = 0.5;
+        adjustedRate = 0.6;
       }
 
       const utterance = new SpeechSynthesisUtterance(text);

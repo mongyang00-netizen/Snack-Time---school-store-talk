@@ -26,6 +26,136 @@ function isTokenMatch(spokenToken: string, targetToken: string): boolean {
   return s === t;
 }
 
+const ARTICLES = new Set(['a', 'an', 'the']);
+
+export interface ElicitationAnalysis {
+  matchedTokens: string[];
+  matchedPhrase: string;
+  missingWord: string;
+  missingLetter: string;
+  hintStr: string;
+  position: 'front' | 'middle' | 'end';
+  blankSentence: string;
+  hintBlankSentence: string;
+  elicitationSentence: string;
+}
+
+/**
+ * Analyzes target sentence vs student spoken tokens specifically for Elicitation (2nd failure attempt).
+ * Excludes articles (a, an, the) from missing word hints per PRD rules.
+ * Accurately determines word order alignment, relative position (front, middle, end), and embedded first-letter hint sentence.
+ */
+export function analyzeElicitationTarget(
+  targetSentence: string,
+  spokenText: string
+): ElicitationAnalysis {
+  const targetTokens = tokenize(targetSentence);
+
+  // Extract clean target words from original sentence string (strip punctuation, keep casing)
+  const targetWordsRaw = targetSentence
+    .trim()
+    .split(/\s+/)
+    .map((w) => w.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'’]/g, ''))
+    .filter(Boolean);
+
+  const spokenTokens = tokenize(spokenText);
+
+  // Sequence alignment: match spoken tokens to target tokens in relative order
+  const matchedTargetIndices: number[] = [];
+  let spokenSearchIdx = 0;
+
+  for (let targetIdx = 0; targetIdx < targetTokens.length; targetIdx++) {
+    const targetToken = targetTokens[targetIdx];
+    let foundAt = -1;
+
+    for (let s = spokenSearchIdx; s < spokenTokens.length; s++) {
+      if (isTokenMatch(spokenTokens[s], targetToken)) {
+        foundAt = s;
+        break;
+      }
+    }
+
+    if (foundAt === -1) {
+      for (let s = 0; s < spokenTokens.length; s++) {
+        if (isTokenMatch(spokenTokens[s], targetToken)) {
+          foundAt = s;
+          break;
+        }
+      }
+    }
+
+    if (foundAt !== -1) {
+      matchedTargetIndices.push(targetIdx);
+      spokenSearchIdx = Math.max(spokenSearchIdx, foundAt + 1);
+    }
+  }
+
+  const matchedTokens = matchedTargetIndices.map((idx) => targetWordsRaw[idx] || targetTokens[idx]);
+  const matchedPhrase = matchedTokens.join(' ');
+
+  // Identify missing target token indices that are NOT articles (a, an, the)
+  const missingNonArticleIndices = targetTokens
+    .map((_, idx) => idx)
+    .filter(
+      (idx) =>
+        !matchedTargetIndices.includes(idx) &&
+        !ARTICLES.has(targetTokens[idx].toLowerCase())
+    );
+
+  let firstMissingIdx = 0;
+  if (missingNonArticleIndices.length > 0) {
+    firstMissingIdx = missingNonArticleIndices[0];
+  }
+
+  const missingWordRaw = targetWordsRaw[firstMissingIdx] || targetTokens[firstMissingIdx] || 'word';
+  const missingLetter = missingWordRaw.charAt(0).toUpperCase();
+  const hintStr = `${missingLetter.toLowerCase()}${'_'.repeat(Math.max(1, missingWordRaw.length - 1))}`;
+
+  // Build sentence completion fill-in-the-blanks and embedded first-letter hint sentence
+  let blankSentence = targetSentence;
+  let hintBlankSentence = targetSentence;
+  let elicitationSentence = targetSentence;
+
+  const regex = new RegExp(`\\b${missingWordRaw}\\b`, 'i');
+  if (regex.test(targetSentence)) {
+    blankSentence = targetSentence.replace(regex, '[ ___ ]');
+    hintBlankSentence = targetSentence.replace(regex, `[ ${hintStr} ]`);
+    elicitationSentence = targetSentence.replace(regex, hintStr);
+  } else {
+    const lowerTarget = targetSentence.toLowerCase();
+    const lowerMissing = missingWordRaw.toLowerCase();
+    const idx = lowerTarget.indexOf(lowerMissing);
+    if (idx !== -1) {
+      blankSentence = targetSentence.substring(0, idx) + '[ ___ ]' + targetSentence.substring(idx + missingWordRaw.length);
+      hintBlankSentence = targetSentence.substring(0, idx) + `[ ${hintStr} ]` + targetSentence.substring(idx + missingWordRaw.length);
+      elicitationSentence = targetSentence.substring(0, idx) + hintStr + targetSentence.substring(idx + missingWordRaw.length);
+    }
+  }
+
+  // Check if matched words occur before or after this missing word index
+  const hasMatchedBefore = matchedTargetIndices.some((idx) => idx < firstMissingIdx);
+  const hasMatchedAfter = matchedTargetIndices.some((idx) => idx > firstMissingIdx);
+
+  let position: 'front' | 'middle' | 'end' = 'middle';
+  if (!hasMatchedBefore) {
+    position = 'front';
+  } else if (!hasMatchedAfter) {
+    position = 'end';
+  }
+
+  return {
+    matchedTokens,
+    matchedPhrase,
+    missingWord: missingWordRaw,
+    missingLetter,
+    hintStr,
+    position,
+    blankSentence,
+    hintBlankSentence,
+    elicitationSentence,
+  };
+}
+
 /**
  * Rule-based local evaluation adhering strictly to Section 7 of PRD.
  * Works completely offline or when Gemini is unavailable.
@@ -101,37 +231,18 @@ export function evaluateSpokenTextLocally(
 
   // Identify which words the student DID say vs what is missing
   const matchedTokens: string[] = [];
-  const missingTargetTokens: string[] = [];
 
   for (const tToken of targetTokens) {
     if (spokenTokens.some((sToken) => isTokenMatch(sToken, tToken))) {
       matchedTokens.push(tToken);
-    } else {
-      missingTargetTokens.push(tToken);
     }
   }
-
-  // Determine the first missing target word for smart, student-aware guidance
-  const firstMissingWord = missingTargetTokens.length > 0 ? missingTargetTokens[0] : turn.primaryMissingHintWord;
-  const firstMissingLetter = firstMissingWord ? firstMissingWord.charAt(0).toUpperCase() : '';
-  const firstMissingHintStr = firstMissingWord ? `${firstMissingLetter}${'_'.repeat(Math.max(1, firstMissingWord.length - 1))}` : turn.firstLetterHint;
 
   // Key words missing -> Failure feedback progression (Section 7):
   // 1st failure: recast
   // 2nd failure: elicitation (first-letter hints for the missing part)
   // 3rd failure: chunking
   if (failureAttemptNumber <= 1) {
-    if (matchedTokens.length > 0) {
-      const matchedPhrase = matchedTokens.join(' ');
-      return {
-        success: false,
-        category: 'recast',
-        feedbackEn: `Good try! You said "${matchedPhrase}". Let's say: "${turn.studentTarget}"`,
-        feedbackKo: `좋은 시도예요! "${matchedPhrase}"에 이어서 전체 문장("${turn.studentTarget}")으로 말해 보세요.`,
-        recognizedText: spokenText,
-        hint: turn.studentTarget,
-      };
-    }
     const recast = STATIC_FEEDBACK_TABLE.recast(turn.studentTarget);
     return {
       success: false,
@@ -142,26 +253,17 @@ export function evaluateSpokenTextLocally(
       hint: turn.studentTarget,
     };
   } else if (failureAttemptNumber === 2) {
-    // If student already said some words (e.g. student said "here"), don't ask for "H"!
-    // Ask for the FIRST MISSING word!
-    if (matchedTokens.length > 0 && firstMissingWord) {
-      return {
-        success: false,
-        category: 'elicitation',
-        feedbackEn: `Almost there! You said "${matchedTokens.join(' ')}". Can you say the next word starting with "${firstMissingLetter}"?`,
-        feedbackKo: `거의 다 왔어요! "${matchedTokens.join(' ')}" 다음의 '${firstMissingLetter}'로 시작하는 단어를 말해 볼까요?`,
-        recognizedText: spokenText,
-        hint: firstMissingHintStr,
-      };
-    }
-    const elicitation = STATIC_FEEDBACK_TABLE.elicitation(turn.firstLetterHint);
+    // 2nd failure: Elicitation embedding first-letter hint into target sentence prompt at missing word position
+    const analysis = analyzeElicitationTarget(turn.studentTarget, spokenText);
+    const { elicitationSentence, hintStr } = analysis;
+
     return {
       success: false,
       category: 'elicitation',
-      feedbackEn: elicitation.en,
-      feedbackKo: elicitation.ko,
+      feedbackEn: `Almost there! ${elicitationSentence}`,
+      feedbackKo: `거의 다 왔어요! ${elicitationSentence}`,
       recognizedText: spokenText,
-      hint: turn.firstLetterHint,
+      hint: hintStr,
     };
   } else {
     const chunking = STATIC_FEEDBACK_TABLE.chunking(turn.chunks);

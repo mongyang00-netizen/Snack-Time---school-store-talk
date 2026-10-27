@@ -29,20 +29,25 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
   // ⭐⭐⭐ Complete all 5 turns without skipping.
   // ⭐⭐ Complete all 5 turns with 1–2 skips.
   // ⭐ Finish the whole dialogue with 3 or more skips.
-  const successCount = records.filter((r) => r.isSuccess).length;
   const skipCount = records.filter((r) => r.isSkipped).length;
+  const successCount = records.filter((r) => r.isSuccess).length;
 
   let stars = 3;
   let starSummaryTitle = '⭐⭐⭐ 완벽한 주문 완료! (Outstanding Shopper!)';
   let starSummaryDesc =
-    '한 번도 건너뛰지 않고 5가지 매점 대화를 모두 영어로 멋지게 말했어요!';
+    '한 번도 건너뛰지 않고 5가지 매점 대화를 모두 영어로 멋지게 완료했어요!';
 
-  if (skipCount >= 3 || successCount <= 2) {
+  if (skipCount === 5) {
+    stars = 0;
+    starSummaryTitle = '모든 문장 건너뜀 (Skipped All)';
+    starSummaryDesc =
+      '모든 문장을 건너뛰었어요. 다음에는 직접 말하기에 도전해 봐요!';
+  } else if (skipCount >= 3) {
     stars = 1;
     starSummaryTitle = '⭐ 간식 구매 완료! (Good Effort!)';
     starSummaryDesc =
       '대화를 끝까지 완주했어요! 다음에는 건너뛰었던 표현도 용기 내어 도전해 봐요!';
-  } else if (skipCount >= 1 || successCount < 5) {
+  } else if (skipCount >= 1) {
     stars = 2;
     starSummaryTitle = '⭐⭐ 훌륭한 간식 주문! (Great Job!)';
     starSummaryDesc =

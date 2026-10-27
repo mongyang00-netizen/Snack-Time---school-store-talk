@@ -4,7 +4,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { DIALOGUE_DATA, FeedbackResult } from './src/data/dialogueData';
-import { evaluateSpokenTextLocally } from './src/utils/speechEvaluation';
+import { evaluateSpokenTextLocally, analyzeElicitationTarget } from './src/utils/speechEvaluation';
 
 dotenv.config();
 
@@ -45,12 +45,13 @@ app.post('/api/feedback', async (req: Request, res: Response) => {
   }
 
   const spoken = (spokenText || '').trim();
+  const attemptNum = Number(failureAttemptNumber) || 1;
 
   // Pre-calculate deterministic baseline from Section 7
   const localFallback: FeedbackResult = evaluateSpokenTextLocally(
     spoken,
     turn,
-    Number(failureAttemptNumber) || 1
+    attemptNum
   );
 
   // If no API key or empty text, return local evaluation immediately
@@ -59,15 +60,24 @@ app.post('/api/feedback', async (req: Request, res: Response) => {
   }
 
   try {
+    const elicitationAnalysis = analyzeElicitationTarget(turn.studentTarget, spoken);
+
     const prompt = `You are Alex, a friendly, encouraging school store clerk talking to a 1st-year Korean middle school student (CEFR A1-A2) practicing English to buy snacks at a school store.
 Target student sentence: "${turn.studentTarget}"
 Target Korean meaning: "${turn.studentKo}"
 Required key words for success: ${JSON.stringify(turn.keyWords)}
-First letter hint: "${turn.firstLetterHint}"
 Sentence chunks: ${JSON.stringify(turn.chunks)}
 
 Student's recognized speech: "${spoken}"
-Current failure attempt count for this turn: ${failureAttemptNumber || 1}
+Current failure attempt count for this turn: ${attemptNum}
+
+CODE ANALYSIS FOR 2ND ATTEMPT (ELICITATION):
+- Exact missing non-article key word: "${elicitationAnalysis.missingWord}"
+- First letter: "${elicitationAnalysis.missingLetter}"
+- Hint pattern: "${elicitationAnalysis.hintStr}"
+- Target sentence with embedded first-letter hint: "${elicitationAnalysis.elicitationSentence}"
+- Missing position in target sentence: "${elicitationAnalysis.position}"
+- Words already spoken by student: "${elicitationAnalysis.matchedPhrase}"
 
 CRITICAL EVALUATION & PRONUNCIATION RULES (PRD Section 7):
 1. Start with praise and focus on only ONE thing to improve, using no more than two short sentences with Korean translations.
@@ -75,20 +85,20 @@ CRITICAL EVALUATION & PRONUNCIATION RULES (PRD Section 7):
 3. ACOUSTIC / PHONETIC VARIANT RULE FOR "an":
    In natural connected speech, the article "an" before a vowel sound ("an apple") is pronounced as the unstressed weak form /ən/. Standard speech recognition models commonly transcribe this weak form as "on apple", "and apple", "un apple", or "a apple".
    If the student said "on apple juice", "and apple juice", or "an apple juice", count this as a COMPLETE SUCCESS (category "success"). Do NOT penalize the student or claim "an" was missing.
-4. STUDENT-AWARE CONTEXTUAL FEEDBACK (CRITICAL):
-   Look carefully at what the student ACTUALLY said: "${spoken}".
-   - If the student already spoke part of the sentence correctly (for example, student said "Here" for target "Here you are.", or "sandwich" for "Can I have a sandwich, please?"):
-     * Explicitly PRAISE what they already said (e.g., "'Here'는 아주 잘 말했어요!").
-     * Focus feedback ONLY on the remaining missing words (e.g., elicit "you are").
-     * NEVER ask the student to say a word starting with the letter of a word they ALREADY said! (For example, if the student already said "Here", NEVER ask them to say a word starting with 'H'!).
-   - If they only spoke partial words, for elicitation (attempt 2), give a hint for the FIRST MISSING word, not the already-spoken word.
+4. FOR 2ND FAILURE ATTEMPT (ELICITATION - category "elicitation"):
+   - Provide feedback by presenting the target sentence with the first-letter hint embedded at the missing word location: "Almost there! ${elicitationAnalysis.elicitationSentence}"
+   - Korean translation format: "거의 다 왔어요! ${elicitationAnalysis.elicitationSentence}"
+   - DO NOT ask questions pointing directly at errors (e.g. DO NOT ask "What word is missing?", "What word starting with P...?", "어떤 단어가 빠졌나요?").
+   - DO NOT explain metalanguage grammar rules (no terms like "auxiliary verb", "preposition", "noun", "article").
+   - DO NOT point out missing articles (a, an, the) or give hints for articles.
+   - Set hint strictly to "${elicitationAnalysis.hintStr}".
 5. SUCCESS CRITERIA:
    - Count the response as SUCCESSFUL when all key words (${JSON.stringify(turn.keyWords)}) are recognized, even if small non-key words are slightly varied.
    - If completely correct: category "success".
    - If key words are present but a non-key word was omitted: category "success_missing_small", praise that you understood, and gently encourage them to use the small word next time.
 6. IF KEY WORDS ARE MISSING (Failure Progression):
-   - 1st failure (attempt 1): category "recast", acknowledge any correct words and provide the full model sentence.
-   - 2nd failure (attempt 2): category "elicitation", give the first-letter hint for the missing word.
+   - 1st failure (attempt 1): category "recast", provide feedback in exact format: feedbackEn = 'Good try! You can say, "${turn.studentTarget}"', feedbackKo = '좋은 시도예요! 이렇게 말해 보세요.', hint = '${turn.studentTarget}'. Do NOT repeat student spoken text or add extra explanations.
+   - 2nd failure (attempt 2): category "elicitation", provide the sentence prompt with the embedded first-letter hint ("Almost there! ${elicitationAnalysis.elicitationSentence}").
    - 3rd failure (attempt 3+): category "chunking", break sentence into parts: ${turn.chunks.join(' / ')}.
 7. Avoid negative words, numerical scores, and percentiles. Keep English simple and Korean translation warm and natural.
 
@@ -131,6 +141,14 @@ Return JSON adhering to schema:
 
     if (response.text) {
       const parsed = JSON.parse(response.text.trim());
+      if (parsed.category === 'recast') {
+        parsed.feedbackEn = `Good try! You can say, "${turn.studentTarget}"`;
+        parsed.feedbackKo = `좋은 시도예요! 이렇게 말해 보세요.`;
+        parsed.hint = turn.studentTarget;
+      } else if (parsed.category === 'elicitation') {
+        parsed.hint = elicitationAnalysis.hintStr;
+        parsed.missingWord = elicitationAnalysis.missingWord;
+      }
       return res.json({
         ...parsed,
         recognizedText: spoken,

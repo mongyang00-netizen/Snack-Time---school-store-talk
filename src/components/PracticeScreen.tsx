@@ -256,14 +256,20 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
     startListening();
   };
 
+  const canClickNext =
+    !isLoadingFeedback &&
+    attemptCount > 0 &&
+    feedback !== null &&
+    (feedback.success || failureCount >= 3);
+
   // Next step
   const handleNext = () => {
     stopSpeech();
     if (isListening) {
       stopListening();
     }
-    // Cannot advance without recorded speech feedback
-    if (attemptCount === 0 || !feedback) {
+    // Enable Next only if correct answer or completed 3rd failure feedback (Chunking)
+    if (!canClickNext) {
       return;
     }
     const isSuccess = Boolean(feedback && feedback.success);
@@ -764,7 +770,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
                   <div className="mt-2.5 p-2 bg-white rounded-lg border border-amber-200 text-xs">
                     <span className="text-amber-800 font-bold block mb-0.5">
                       {feedback.category === 'elicitation'
-                        ? '🔤 첫 글자 힌트 (First-Letter Hint):'
+                        ? '💡 힌트 (Hint):'
                         : feedback.category === 'chunking'
                         ? '✂️ 나누어 말하기 힌트 (Chunks):'
                         : '🎯 목표 문장 다시 보기:'}
@@ -802,10 +808,12 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
               <button
                 onClick={handleNext}
-                disabled={isLoadingFeedback || attemptCount === 0 || !feedback}
+                disabled={!canClickNext}
                 title={
                   attemptCount === 0
                     ? '마이크로 음성을 녹음한 후 다음 단계로 이동할 수 있습니다.'
+                    : !feedback?.success && failureCount < 3
+                    ? '3차 피드백(Chunking)까지 확인한 후 다음 단계로 이동할 수 있습니다.'
                     : undefined
                 }
                 className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
@@ -820,10 +828,15 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
             </div>
           </div>
 
-          {/* Guide message if user hasn't recorded yet */}
+          {/* Guide messages */}
           {attemptCount === 0 && (
             <p className="text-[11px] text-amber-900/80 text-center font-medium">
               🎙️ 마이크를 누르고 말해 보세요! (말하기 없이 넘어가려면 왼쪽 &apos;건너뛰기&apos;를 눌러주세요)
+            </p>
+          )}
+          {attemptCount > 0 && feedback && !feedback.success && failureCount < 3 && (
+            <p className="text-[11px] text-amber-900/80 text-center font-medium">
+              💡 &apos;다시 말하기&apos;를 눌러 3차 피드백까지 연습을 완료하거나 &apos;건너뛰기&apos;를 눌러주세요. ({failureCount}/3단계 피드백 진행 중)
             </p>
           )}
         </div>
