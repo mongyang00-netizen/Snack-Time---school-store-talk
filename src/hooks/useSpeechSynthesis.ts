@@ -142,9 +142,21 @@ export function useSpeechSynthesis() {
 
       window.speechSynthesis.cancel();
 
+      const isIOS = typeof navigator !== 'undefined' && (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+      );
+
+      // In iOS (Safari), small rate adjustments like 0.7 may not sound noticeably different due to WebKit TTS implementation.
+      // Per requirements: For iOS environment specifically, adjust slow rate (< 0.85) to 0.5.
+      let adjustedRate = rate;
+      if (isIOS && rate < 0.85) {
+        adjustedRate = 0.5;
+      }
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
-      utterance.rate = rate; // 0.9 for normal, 0.7 for slow
+      utterance.rate = adjustedRate;
       utterance.pitch = 1.0; // Standard natural pitch without artificial shift per requirements
 
       const femaleVoice = getActiveVoice();
