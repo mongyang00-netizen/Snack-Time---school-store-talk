@@ -224,10 +224,10 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
     speak(currentTurn.studentTarget, 0.9, () => setActiveRate(null));
   };
 
-  // Play target sentence: slow rate 0.6 (clearly slow for learners)
+  // Play target sentence: slow rate 0.7
   const handlePlayTargetSlow = () => {
-    setActiveRate(0.6);
-    speak(currentTurn.studentTarget, 0.6, () => setActiveRate(null));
+    setActiveRate(0.7);
+    speak(currentTurn.studentTarget, 0.7, () => setActiveRate(null));
   };
 
   // Mic click handler
