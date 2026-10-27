@@ -1,0 +1,8 @@
+{
+  "name": "Snack Time! — School Store Talk",
+  "description": "A friendly English speaking practice app for middle school students buying snacks at a school store.",
+  "requestFramePermissions": [
+    "CAMERA_MICROPHONE"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
