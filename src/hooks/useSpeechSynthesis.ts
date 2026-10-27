@@ -6,32 +6,49 @@ export function useSpeechSynthesis() {
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  // Helper to find the best male voice for store clerk Alex
+  // Helper to find the best male voice for store clerk Alex with browser consistency
   const findAlexMaleVoice = (availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined => {
     const enVoices = availableVoices.filter((v) => v.lang.startsWith('en'));
     if (!enVoices.length) return availableVoices[0];
 
+    const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isChrome = typeof navigator !== 'undefined' && /chrome|chromium|crios/i.test(navigator.userAgent) && !/edge|edg/i.test(navigator.userAgent);
+
+    if (isSafari) {
+      // Safari / macOS / iOS: Daniel, Alex, Oliver, or en-US/en-GB male voices
+      const safariKeys = ['daniel', 'alex', 'oliver', 'fred', 'george', 'aaron', 'male'];
+      for (const kw of safariKeys) {
+        const match = enVoices.find((v) => v.name.toLowerCase().includes(kw));
+        if (match) return match;
+      }
+    } else if (isChrome) {
+      // Chrome: Google UK English Male, Microsoft Guy, Microsoft David, or male
+      const chromeKeys = ['google uk english male', 'guy', 'david', 'mark', 'alex', 'male', 'tom'];
+      for (const kw of chromeKeys) {
+        const match = enVoices.find((v) => v.name.toLowerCase().includes(kw));
+        if (match) return match;
+      }
+    }
+
     const maleKeywords = [
-      'alex',     // macOS / iOS built-in English voice (named Alex!)
-      'david',    // Windows built-in (Microsoft David)
-      'guy',      // Windows Natural (Microsoft Guy)
-      'mark',     // Windows (Microsoft Mark)
-      'daniel',   // macOS / iOS UK male
-      'fred',     // macOS
-      'george',   // UK male
-      'male',     // Any voice explicitly labelled Male
+      'alex',
+      'david',
+      'guy',
+      'mark',
+      'daniel',
+      'fred',
+      'george',
+      'male',
       'tom',
       'aaron',
       'oliver',
     ];
 
-    // 1. Search for an English male voice matching male keywords
     for (const kw of maleKeywords) {
       const match = enVoices.find((v) => v.name.toLowerCase().includes(kw));
       if (match) return match;
     }
 
-    // 2. Fallback to en-US voice
     return enVoices.find((v) => v.lang === 'en-US') || enVoices[0];
   };
 
@@ -51,7 +68,12 @@ export function useSpeechSynthesis() {
     loadVoices();
     window.speechSynthesis.onvoiceschanged = loadVoices;
 
+    // Periodic check for async voice loading in Chrome/Safari
+    const timer = setInterval(loadVoices, 200);
+    setTimeout(() => clearInterval(timer), 3000);
+
     return () => {
+      clearInterval(timer);
       if (window.speechSynthesis) {
         window.speechSynthesis.cancel();
       }
@@ -65,7 +87,6 @@ export function useSpeechSynthesis() {
     }
   }, []);
 
-  // Stable speak function that doesn't recreate when voices load
   const speak = useCallback(
     (text: string, rate: number = 0.9, onEnd?: () => void) => {
       if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
@@ -73,11 +94,13 @@ export function useSpeechSynthesis() {
         return;
       }
 
-      // If voices are not yet loaded by Chrome on initial mount, retry quickly
       let currentVoices = voicesRef.current;
       if (!currentVoices.length) {
         currentVoices = window.speechSynthesis.getVoices();
-        voicesRef.current = currentVoices;
+        if (currentVoices.length) {
+          voicesRef.current = currentVoices;
+          setVoices(currentVoices);
+        }
       }
 
       window.speechSynthesis.cancel();
@@ -85,8 +108,20 @@ export function useSpeechSynthesis() {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'en-US';
       utterance.rate = rate; // 0.9 for normal, 0.7 for slow
-      // Set lower natural pitch for store clerk Alex (male voice)
-      utterance.pitch = 0.9;
+
+      const isSafari = typeof navigator !== 'undefined' && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      const isChrome = typeof navigator !== 'undefined' && /chrome|chromium|crios/i.test(navigator.userAgent) && !/edge|edg/i.test(navigator.userAgent);
+
+      // Calibrate pitch per browser:
+      // Safari voices can sound too deep at low pitch; set 1.05 for warm natural male tone.
+      // Chrome default voices can sound neutral/flat; set 1.05 for engaging clerk warmth.
+      if (isSafari) {
+        utterance.pitch = 1.05;
+      } else if (isChrome) {
+        utterance.pitch = 1.05;
+      } else {
+        utterance.pitch = 1.0;
+      }
 
       const maleVoice = findAlexMaleVoice(currentVoices);
       if (maleVoice) {
@@ -110,14 +145,13 @@ export function useSpeechSynthesis() {
 
       utteranceRef.current = utterance;
 
-      // Chrome speech synthesis resume safeguard
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
 
       window.speechSynthesis.speak(utterance);
     },
-    [] // Stable reference! Voices are read via voicesRef.current or getVoices()
+    []
   );
 
   return {

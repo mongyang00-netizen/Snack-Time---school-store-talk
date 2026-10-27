@@ -204,7 +204,7 @@ export function useSpeechRecognition({ onTranscriptComplete, targetContext }: Sp
 
 /**
  * Resolves the most accurate transcript hypothesis across candidate alternatives,
- * correctly capturing authentic English weak forms like unstressed /ən/ ("언") before vowel nouns.
+ * respecting actual speech pronunciation without forced string replacement for 'on'.
  */
 function resolveBestTranscriptHypothesis(
   res: SpeechRecognitionResult,
@@ -238,22 +238,6 @@ function resolveBestTranscriptHypothesis(
     }
   }
 
-  // 2. Phonetic acoustic disambiguation for weak-form /ən/ ("언"):
-  // In standard English phonology, the indefinite article "an" is pronounced /ən/ (schwa + nasal /n/, sounding like Korean '언').
-  // When an English learner pronounces "언" (/ən/) before a vowel noun (e.g. apple, orange, ice),
-  // general-domain ASR models often bias toward prepositions and output "on" or "un" or "en"
-  // (e.g., "on apple", "un apple") instead of "an apple".
-  // In English grammar, "on apple" / "un apple" is non-standard before singular countable nouns.
-  // We disambiguate this acoustic transcription directly into "an [vowel-noun]" so that
-  // natural pronunciation of /ən/ is accurately recognized as "an".
-  bestText = bestText.replace(
-    /\b([Oo]n|[Uu]n|[Ee]n|[Aa]nd)\s+(apple|orange|ice|egg|elephant|umbrella|onion)\b/gi,
-    (match, p1, p2) => {
-      const isCap = p1[0] === p1[0].toUpperCase();
-      return `${isCap ? 'An' : 'an'} ${p2}`;
-    }
-  );
-
   return bestText;
 }
 
@@ -278,14 +262,6 @@ function resolveBestTranscriptHypothesis(
         }
 
         let combined = (bestTranscript + fullInterim).trim();
-        // Ensure final phonetic disambiguation on combined string as well
-        combined = combined.replace(
-          /\b([Oo]n|[Uu]n|[Ee]n|[Aa]nd)\s+(apple|orange|ice|egg|elephant|umbrella|onion)\b/gi,
-          (match, p1, p2) => {
-            const isCap = p1[0] === p1[0].toUpperCase();
-            return `${isCap ? 'An' : 'an'} ${p2}`;
-          }
-        );
 
         transcriptRef.current = combined;
         setTranscript(bestTranscript.trim() || combined);
