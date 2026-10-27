@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const SELECTED_VOICE_STORAGE_KEY = 'school_store_alex_voice_uri';
+const VOICE_CHANGED_EVENT = 'alex_voice_changed';
 
 export function useSpeechSynthesis() {
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -14,6 +15,27 @@ export function useSpeechSynthesis() {
 
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  useEffect(() => {
+    const handleVoiceChange = () => {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem(SELECTED_VOICE_STORAGE_KEY) || '';
+        setSelectedVoiceURIState(stored);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener(VOICE_CHANGED_EVENT, handleVoiceChange);
+      window.addEventListener('storage', handleVoiceChange);
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener(VOICE_CHANGED_EVENT, handleVoiceChange);
+        window.removeEventListener('storage', handleVoiceChange);
+      }
+    };
+  }, []);
 
   // Helper to find natural and friendly American English (en-US) female voice for store clerk Alex
   const findAlexFemaleVoice = useCallback((availableVoices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | undefined => {
@@ -83,6 +105,7 @@ export function useSpeechSynthesis() {
       } else {
         localStorage.removeItem(SELECTED_VOICE_STORAGE_KEY);
       }
+      window.dispatchEvent(new CustomEvent(VOICE_CHANGED_EVENT, { detail: uri }));
     }
   }, []);
 
