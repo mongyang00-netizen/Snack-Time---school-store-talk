@@ -34,7 +34,7 @@ export const BrowserNoticeModal: React.FC<BrowserNoticeModalProps> = ({
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-sm text-slate-700">
+        <div className="p-5 space-y-4 text-sm text-slate-700 break-keep">
           {inAppBrowser && (
             <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-amber-900">
               <div className="flex items-start gap-2.5">

@@ -24,6 +24,8 @@ export interface FeedbackResult {
   recognizedText: string;
   missingWord?: string;
   hint?: string;
+  source?: 'gemini' | 'local_fallback' | 'local';
+  model?: string;
 }
 
 export interface TurnRecord {

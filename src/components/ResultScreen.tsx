@@ -73,10 +73,10 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           <span>주문 및 말하기 연습 완료</span>
         </div>
 
-        <h1 className="font-display font-black text-3xl md:text-4xl text-amber-950 tracking-tight">
+        <h1 className="font-display font-black text-3xl md:text-4xl text-amber-950 tracking-tight break-keep">
           Order Complete!
         </h1>
-        <p className="text-slate-600 text-sm md:text-base mt-1">
+        <p className="text-slate-600 text-sm md:text-base mt-1 break-keep">
           축하합니다! 학교 매점에서 영어로 간식 주문을 성공적으로 마쳤어요!
         </p>
 
@@ -106,10 +106,10 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           ))}
         </div>
 
-        <h2 className="font-display font-bold text-xl md:text-2xl mt-1">
+        <h2 className="font-display font-bold text-xl md:text-2xl mt-1 break-keep">
           {starSummaryTitle}
         </h2>
-        <p className="text-amber-100 text-xs md:text-sm mt-1 max-w-md mx-auto">
+        <p className="text-amber-100 text-xs md:text-sm mt-1 max-w-md mx-auto break-keep">
           {starSummaryDesc}
         </p>
 
@@ -232,12 +232,12 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
       </div>
 
       {/* Bottom: Encouraging Message & Action Buttons */}
-      <div className="w-full bg-amber-50 rounded-2xl p-4 border border-amber-200 text-center mb-6 text-xs text-amber-950 font-medium">
+      <div className="w-full bg-amber-50 rounded-2xl p-4 border border-amber-200 text-center mb-6 text-xs text-amber-950 font-medium break-keep">
         <p>
           &quot;Give me...&quot; 대신 <strong>&quot;Can I have..., please?&quot;</strong> 처럼
           공손하고 자연스럽게 요청하는 연습이 잘 되었나요?
           <br />
-          실제 교실이나 해외 여행 매점에서도 자신 있게 영어로 말해보세요! 🥪🧃
+          실제 교실이나 매점에서도 자신 있게 영어로 말해보세요! 🥪🧃
         </p>
       </div>
 
@@ -246,16 +246,16 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           onClick={onPracticeAgain}
           className="w-full sm:w-1/2 py-3.5 px-4 bg-white hover:bg-amber-50 text-amber-900 border-2 border-amber-300 font-bold text-sm md:text-base rounded-2xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
         >
-          <RotateCcw className="w-4 h-4 text-amber-700" />
-          <span>다시 연습하기 (Practice Again)</span>
+          <RotateCcw className="w-4 h-4 text-amber-700 shrink-0" />
+          <span className="break-keep">다시 연습하기 (Practice Again)</span>
         </button>
 
         <button
           onClick={onFinish}
           className="w-full sm:w-1/2 py-3.5 px-4 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm md:text-base rounded-2xl shadow-md transition-colors flex items-center justify-center gap-2 cursor-pointer"
         >
-          <CheckCircle2 className="w-4 h-4" />
-          <span>완료하기 (Finish)</span>
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <span className="break-keep">완료하기 (Finish)</span>
         </button>
       </div>
     </div>

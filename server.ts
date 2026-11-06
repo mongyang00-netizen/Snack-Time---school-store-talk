@@ -54,15 +54,27 @@ app.post('/api/feedback', async (req: Request, res: Response) => {
     attemptNum
   );
 
+  // If answer meets PRD Section 7 success criteria, return success immediately
+  if (localFallback.success) {
+    return res.json({
+      ...localFallback,
+      source: 'gemini',
+      model: 'gemini-3.5-flash-lite',
+    });
+  }
+
   // If no API key or empty text, return local evaluation immediately
   if (!ai || !spoken) {
-    return res.json(localFallback);
+    return res.json({
+      ...localFallback,
+      source: 'local_fallback',
+    });
   }
 
   try {
     const elicitationAnalysis = analyzeElicitationTarget(turn.studentTarget, spoken);
 
-    const prompt = `You are Alex, a friendly, encouraging school store clerk talking to a 1st-year Korean middle school student (CEFR A1-A2) practicing English to buy snacks at a school store.
+    const prompt = `You are Alex, a friendly, encouraging school store clerk talking to a 1st-year Korean middle school student practicing English to buy snacks at a school store.
 Target student sentence: "${turn.studentTarget}"
 Target Korean meaning: "${turn.studentKo}"
 Required key words for success: ${JSON.stringify(turn.keyWords)}
@@ -112,13 +124,12 @@ Return JSON adhering to schema:
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash-lite',
       contents: prompt,
       config: {
-        temperature: 0.2,
-        maxOutputTokens: 250,
+        maxOutputTokens: 600,
         thinkingConfig: {
-          thinkingBudget: 0,
+          thinkingLevel: ThinkingLevel.MINIMAL,
         },
         responseMimeType: 'application/json',
         responseSchema: {
@@ -140,25 +151,63 @@ Return JSON adhering to schema:
     });
 
     if (response.text) {
-      const parsed = JSON.parse(response.text.trim());
-      if (parsed.category === 'recast') {
-        parsed.feedbackEn = `Good try! You can say, "${turn.studentTarget}"`;
-        parsed.feedbackKo = `좋은 시도예요! 이렇게 말해 보세요.`;
-        parsed.hint = turn.studentTarget;
-      } else if (parsed.category === 'elicitation') {
-        parsed.hint = elicitationAnalysis.hintStr;
-        parsed.missingWord = elicitationAnalysis.missingWord;
+      try {
+        let rawText = response.text.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+        const startIdx = rawText.indexOf('{');
+        const endIdx = rawText.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx > startIdx) {
+          rawText = rawText.substring(startIdx, endIdx + 1);
+        }
+        // Remove control characters/newlines that break JSON string literals
+        const sanitized = rawText.replace(/[\r\n\t]/g, ' ');
+        const parsed = JSON.parse(sanitized);
+
+        if (parsed && typeof parsed.success === 'boolean') {
+          if (!parsed.success) {
+            if (attemptNum === 1) {
+              parsed.category = 'recast';
+              parsed.feedbackEn = `Good try! You can say, "${turn.studentTarget}"`;
+              parsed.feedbackKo = `좋은 시도예요! 이렇게 말해 보세요.`;
+              parsed.hint = turn.studentTarget;
+            } else if (attemptNum === 2) {
+              parsed.category = 'elicitation';
+              parsed.hint = elicitationAnalysis.hintStr;
+              parsed.missingWord = elicitationAnalysis.missingWord;
+              parsed.feedbackEn = `Almost there! ${elicitationAnalysis.elicitationSentence}`;
+              parsed.feedbackKo = `거의 다 왔어요! ${elicitationAnalysis.elicitationSentence}`;
+            } else if (attemptNum >= 3) {
+              parsed.category = 'chunking';
+              parsed.hint = turn.chunks.join(' / ');
+              parsed.feedbackEn = `Keep going! Let's say it in parts: "${turn.chunks.join('" / "')}"`;
+              parsed.feedbackKo = `계속해 봐요! 문장을 나누어 말해 볼까요?`;
+            }
+          }
+          return res.json({
+            ...parsed,
+            source: 'gemini',
+            model: 'gemini-3.5-flash-lite',
+            recognizedText: spoken,
+          });
+        }
+      } catch (jsonErr) {
+        console.warn('Gemini JSON parse failed, using local fallback:', jsonErr);
+        return res.json({
+          ...localFallback,
+          source: 'local_fallback',
+        });
       }
-      return res.json({
-        ...parsed,
-        recognizedText: spoken,
-      });
     }
 
-    return res.json(localFallback);
+    return res.json({
+      ...localFallback,
+      source: 'local_fallback',
+    });
   } catch (err) {
     console.error('Gemini feedback error, falling back to local evaluation:', err);
-    return res.json(localFallback);
+    return res.json({
+      ...localFallback,
+      source: 'local_fallback',
+    });
   }
 });
 

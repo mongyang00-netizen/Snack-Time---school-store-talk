@@ -10,9 +10,7 @@ import { PracticeScreen } from './components/PracticeScreen';
 import { ResultScreen } from './components/ResultScreen';
 import { BrowserNoticeModal } from './components/BrowserNoticeModal';
 import { HelpModal } from './components/HelpModal';
-import { TtsSettingsModal } from './components/TtsSettingsModal';
 import { DIALOGUE_DATA, TurnRecord } from './data/dialogueData';
-import { useSpeechSynthesis } from './hooks/useSpeechSynthesis';
 
 type ScreenType = 'start' | 'practice' | 'result';
 
@@ -22,18 +20,6 @@ export default function App() {
   const [records, setRecords] = useState<TurnRecord[]>([]);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isBrowserNoticeOpen, setIsBrowserNoticeOpen] = useState(false);
-  const [isTtsSettingsOpen, setIsTtsSettingsOpen] = useState(false);
-
-  // Global Speech Synthesis instance for settings modal
-  const {
-    voices,
-    activeVoice,
-    selectedVoiceURI,
-    setSelectedVoiceURI,
-    resetVoiceToDefault,
-    previewVoice,
-    isSpeaking,
-  } = useSpeechSynthesis();
 
   // Browser environmental checks
   const [inAppBrowser, setInAppBrowser] = useState(false);
@@ -105,7 +91,6 @@ export default function App() {
         currentScreen={screen}
         onNavigateStart={() => setScreen('start')}
         onOpenHelp={() => setIsHelpOpen(true)}
-        onOpenTtsSettings={() => setIsTtsSettingsOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -133,8 +118,6 @@ export default function App() {
         )}
       </main>
 
-
-
       {/* Modals */}
       <BrowserNoticeModal
         isOpen={isBrowserNoticeOpen}
@@ -145,18 +128,6 @@ export default function App() {
       />
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
-
-      <TtsSettingsModal
-        isOpen={isTtsSettingsOpen}
-        onClose={() => setIsTtsSettingsOpen(false)}
-        voices={voices}
-        activeVoice={activeVoice}
-        selectedVoiceURI={selectedVoiceURI}
-        onSelectVoice={setSelectedVoiceURI}
-        onResetDefault={resetVoiceToDefault}
-        onPreviewVoice={previewVoice}
-        isSpeaking={isSpeaking}
-      />
     </div>
   );
 }

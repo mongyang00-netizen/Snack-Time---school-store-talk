@@ -1,0 +1,192 @@
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
+import { DIALOGUE_DATA, FeedbackResult } from '../src/data/dialogueData';
+import { evaluateSpokenTextLocally, analyzeElicitationTarget } from '../src/utils/speechEvaluation';
+
+// Vercel Serverless Function Handler
+export default async function handler(req: any, res: any) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { spokenText, turnId, failureAttemptNumber } = req.body || {};
+  const turn = DIALOGUE_DATA.find((t) => t.id === Number(turnId));
+
+  if (!turn) {
+    return res.status(400).json({ error: 'Invalid turn ID' });
+  }
+
+  const spoken = (spokenText || '').trim();
+  const attemptNum = Number(failureAttemptNumber) || 1;
+
+  // Pre-calculate deterministic baseline from Section 7
+  const localFallback: FeedbackResult = evaluateSpokenTextLocally(
+    spoken,
+    turn,
+    attemptNum
+  );
+
+  // If answer meets PRD Section 7 success criteria, return success immediately
+  if (localFallback.success) {
+    return res.json({
+      ...localFallback,
+      source: 'gemini',
+      model: 'gemini-3.5-flash-lite',
+    });
+  }
+
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || !spoken) {
+    return res.json({
+      ...localFallback,
+      source: 'local_fallback',
+    });
+  }
+
+  try {
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        },
+      },
+    });
+
+    const elicitationAnalysis = analyzeElicitationTarget(turn.studentTarget, spoken);
+
+    const prompt = `You are Alex, a friendly, encouraging school store clerk talking to a 1st-year Korean middle school student practicing English to buy snacks at a school store.
+Target student sentence: "${turn.studentTarget}"
+Target Korean meaning: "${turn.studentKo}"
+Required key words for success: ${JSON.stringify(turn.keyWords)}
+Sentence chunks: ${JSON.stringify(turn.chunks)}
+
+Student's recognized speech: "${spoken}"
+Current failure attempt count for this turn: ${attemptNum}
+
+CODE ANALYSIS FOR 2ND ATTEMPT (ELICITATION):
+- Exact missing non-article key word: "${elicitationAnalysis.missingWord}"
+- First letter: "${elicitationAnalysis.missingLetter}"
+- Hint pattern: "${elicitationAnalysis.hintStr}"
+- Target sentence with embedded first-letter hint: "${elicitationAnalysis.elicitationSentence}"
+- Missing position in target sentence: "${elicitationAnalysis.position}"
+- Words already spoken by student: "${elicitationAnalysis.matchedPhrase}"
+
+CRITICAL EVALUATION & PRONUNCIATION RULES (PRD Section 7):
+1. Start with praise and focus on only ONE thing to improve, using no more than two short sentences with Korean translations.
+2. Focus on whether Alex can understand the student's message, rather than native-like pronunciation. Ignore punctuation and capitalization.
+3. ACOUSTIC / PHONETIC VARIANT RULE FOR "an":
+   In natural connected speech, the article "an" before a vowel sound ("an apple") is pronounced as the unstressed weak form /ən/. Standard speech recognition models commonly transcribe this weak form as "on apple", "and apple", "un apple", or "a apple".
+   If the student said "on apple juice", "and apple juice", or "an apple juice", count this as a COMPLETE SUCCESS (category "success"). Do NOT penalize the student or claim "an" was missing.
+4. FOR 2ND FAILURE ATTEMPT (ELICITATION - category "elicitation"):
+   - Provide feedback by presenting the target sentence with the first-letter hint embedded at the missing word location: "Almost there! ${elicitationAnalysis.elicitationSentence}"
+   - Korean translation format: "거의 다 왔어요! ${elicitationAnalysis.elicitationSentence}"
+   - DO NOT ask questions pointing directly at errors (e.g. DO NOT ask "What word is missing?", "What word starting with P...?", "어떤 단어가 빠졌나요?").
+   - DO NOT explain metalanguage grammar rules (no terms like "auxiliary verb", "preposition", "noun", "article").
+   - DO NOT point out missing articles (a, an, the) or give hints for articles.
+   - Set hint strictly to "${elicitationAnalysis.hintStr}".
+5. SUCCESS CRITERIA:
+   - Count the response as SUCCESSFUL when all key words (${JSON.stringify(turn.keyWords)}) are recognized, even if small non-key words are slightly varied.
+   - If completely correct: category "success".
+   - If key words are present but a non-key word was omitted: category "success_missing_small", praise that you understood, and gently encourage them to use the small word next time.
+6. IF KEY WORDS ARE MISSING (Failure Progression):
+   - 1st failure (attempt 1): category "recast", provide feedback in exact format: feedbackEn = 'Good try! You can say, "${turn.studentTarget}"', feedbackKo = '좋은 시도예요! 이렇게 말해 보세요.', hint = '${turn.studentTarget}'. Do NOT repeat student spoken text or add extra explanations.
+   - 2nd failure (attempt 2): category "elicitation", provide the sentence prompt with the embedded first-letter hint ("Almost there! ${elicitationAnalysis.elicitationSentence}").
+   - 3rd failure (attempt 3+): category "chunking", break sentence into parts: ${turn.chunks.join(' / ')}.
+7. Avoid negative words, numerical scores, and percentiles. Keep English simple and Korean translation warm and natural.
+
+Return JSON adhering to schema:
+- success (boolean)
+- category ("success" | "success_missing_small" | "recast" | "elicitation" | "chunking" | "no_speech")
+- feedbackEn (string, 1-2 friendly sentences in simple English)
+- feedbackKo (string, accurate natural Korean translation of the feedback in parentheses or standalone)
+- missingWord (optional string)
+- hint (optional string)
+`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.5-flash-lite',
+      contents: prompt,
+      config: {
+        maxOutputTokens: 600,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.MINIMAL,
+        },
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            success: { type: Type.BOOLEAN },
+            category: {
+              type: Type.STRING,
+              description: 'Feedback category',
+            },
+            feedbackEn: { type: Type.STRING },
+            feedbackKo: { type: Type.STRING },
+            missingWord: { type: Type.STRING },
+            hint: { type: Type.STRING },
+          },
+          required: ['success', 'category', 'feedbackEn', 'feedbackKo'],
+        },
+      },
+    });
+
+    if (response.text) {
+      try {
+        let rawText = response.text.trim().replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+        const startIdx = rawText.indexOf('{');
+        const endIdx = rawText.lastIndexOf('}');
+        if (startIdx !== -1 && endIdx > startIdx) {
+          rawText = rawText.substring(startIdx, endIdx + 1);
+        }
+        // Remove control characters/newlines that break JSON string literals
+        const sanitized = rawText.replace(/[\r\n\t]/g, ' ');
+        const parsed = JSON.parse(sanitized);
+
+        if (parsed && typeof parsed.success === 'boolean') {
+          if (!parsed.success) {
+            if (attemptNum === 1) {
+              parsed.category = 'recast';
+              parsed.feedbackEn = `Good try! You can say, "${turn.studentTarget}"`;
+              parsed.feedbackKo = `좋은 시도예요! 이렇게 말해 보세요.`;
+              parsed.hint = turn.studentTarget;
+            } else if (attemptNum === 2) {
+              parsed.category = 'elicitation';
+              parsed.hint = elicitationAnalysis.hintStr;
+              parsed.missingWord = elicitationAnalysis.missingWord;
+              parsed.feedbackEn = `Almost there! ${elicitationAnalysis.elicitationSentence}`;
+              parsed.feedbackKo = `거의 다 왔어요! ${elicitationAnalysis.elicitationSentence}`;
+            } else if (attemptNum >= 3) {
+              parsed.category = 'chunking';
+              parsed.hint = turn.chunks.join(' / ');
+              parsed.feedbackEn = `Keep going! Let's say it in parts: "${turn.chunks.join('" / "')}"`;
+              parsed.feedbackKo = `계속해 봐요! 문장을 나누어 말해 볼까요?`;
+            }
+          }
+          return res.json({
+            ...parsed,
+            source: 'gemini',
+            model: 'gemini-3.5-flash-lite',
+            recognizedText: spoken,
+          });
+        }
+      } catch (jsonErr) {
+        console.warn('Vercel Gemini JSON parse failed, using local fallback:', jsonErr);
+        return res.json({
+          ...localFallback,
+          source: 'local_fallback',
+        });
+      }
+    }
+
+    return res.json({
+      ...localFallback,
+      source: 'local_fallback',
+    });
+  } catch (err) {
+    console.error('Vercel serverless Gemini feedback error, falling back:', err);
+    return res.json({
+      ...localFallback,
+      source: 'local_fallback',
+    });
+  }
+}

@@ -170,10 +170,10 @@ export function useSpeechSynthesis() {
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
       );
 
-      // Per user request: For iOS environment specifically, try slow rate (< 0.85) at 0.6.
+      // Per user request: For iOS environment specifically, set slow rate (< 0.85) to 0.5.
       let adjustedRate = rate;
       if (isIOS && rate < 0.85) {
-        adjustedRate = 0.6;
+        adjustedRate = 0.5;
       }
 
       const utterance = new SpeechSynthesisUtterance(text);

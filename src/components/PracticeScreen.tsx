@@ -16,7 +16,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { DialogueTurn, FeedbackResult, TurnRecord } from '../data/dialogueData';
-import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis';
+import { useDialogueAudio } from '../hooks/useDialogueAudio';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { evaluateSpokenTextLocally } from '../utils/speechEvaluation';
 import { soundFX } from '../utils/soundEffects';
@@ -37,7 +37,13 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
   onTurnComplete,
   onSkipTurn,
 }) => {
-  const { speak, stop: stopSpeech, isSpeaking } = useSpeechSynthesis();
+  const {
+    isPlaying: isSpeaking,
+    stopAudio: stopSpeech,
+    playClerk,
+    playTargetNormal,
+    playTargetSlow,
+  } = useDialogueAudio();
 
   // Attempts tracking for current step
   const [attemptCount, setAttemptCount] = useState(0);
@@ -119,7 +125,8 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
         clearTimeout(timeoutId);
 
-        if (response.ok) {
+        const isJson = response.headers.get('content-type')?.includes('application/json');
+        if (response.ok && isJson) {
           const data = await response.json();
           if (data && typeof data.success === 'boolean') {
             finalFeedback = {
@@ -130,13 +137,18 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               recognizedText: data.recognizedText || rawSpoken,
               missingWord: data.missingWord || fallbackResult.missingWord,
               hint: data.hint || fallbackResult.hint,
+              source: data.source || 'gemini',
+              model: data.model,
             };
           }
         }
       } catch {
         // If timeout or network failure occurs, seamlessly fall back to PRD Section 7 rule-based feedback
         clearTimeout(timeoutId);
-        finalFeedback = fallbackResult;
+        finalFeedback = {
+          ...fallbackResult,
+          source: 'local_fallback',
+        };
       } finally {
         clearTimeout(timeoutId);
         if (activeAbortControllerRef.current === abortController) {
@@ -200,7 +212,8 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
     // Automatically speak clerk Alex's question aloud once when entering each turn
     const timer = setTimeout(() => {
-      speak(currentTurn.partnerEn, 0.9);
+      setActiveRate(null);
+      playClerk(currentTurn.id, currentTurn.partnerEn);
     }, 400);
 
     return () => {
@@ -215,19 +228,19 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
   // Replay clerk question
   const handlePlayPartner = () => {
     setActiveRate(null);
-    speak(currentTurn.partnerEn, 0.9);
+    playClerk(currentTurn.id, currentTurn.partnerEn);
   };
 
   // Play target sentence: normal rate 0.9
   const handlePlayTargetNormal = () => {
     setActiveRate(0.9);
-    speak(currentTurn.studentTarget, 0.9, () => setActiveRate(null));
+    playTargetNormal(currentTurn.id, currentTurn.studentTarget, () => setActiveRate(null));
   };
 
   // Play target sentence: slow rate 0.7
   const handlePlayTargetSlow = () => {
     setActiveRate(0.7);
-    speak(currentTurn.studentTarget, 0.7, () => setActiveRate(null));
+    playTargetSlow(currentTurn.id, currentTurn.studentTarget, () => setActiveRate(null));
   };
 
   // Mic click handler
@@ -381,11 +394,6 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
                 <span className="text-[11px] font-bold uppercase tracking-wider text-amber-800">
                   School Store Clerk (점원 Alex)
                 </span>
-                {stepIndex === 0 && (
-                  <span className="px-2 py-0.5 bg-amber-100 text-amber-900 text-[10px] font-bold rounded-md border border-amber-200">
-                    첫인사 (Greeting)
-                  </span>
-                )}
               </div>
               <button
                 onClick={handlePlayPartner}
@@ -398,10 +406,10 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
               </button>
             </div>
 
-            <p className="font-display font-bold text-lg md:text-xl text-slate-900 leading-snug">
+            <p className="font-display font-bold text-lg md:text-xl text-slate-900 leading-snug break-keep">
               &quot;{currentTurn.partnerEn}&quot;
             </p>
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1 break-keep">
               {currentTurn.partnerKo}
             </p>
           </div>
@@ -409,19 +417,19 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
       </div>
 
       {/* Middle: Student Target Sentence Card with Listen & Slow Buttons */}
-      <div className="bg-white rounded-3xl p-5 md:p-6 shadow-sm border border-amber-200 text-center relative overflow-hidden">
+      <div className="bg-white rounded-3xl p-4 sm:p-5 md:p-6 shadow-sm border border-amber-200 text-center relative overflow-hidden">
         <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 border border-amber-200 rounded-full text-[11px] font-semibold text-amber-800 mb-3">
           <Sparkles className="w-3.5 h-3.5 text-amber-600" />
           <span>내가 말할 문장 (Your Target Sentence)</span>
         </div>
 
         {/* Target sentence in the largest text */}
-        <h2 className="font-display font-extrabold text-2xl md:text-3xl text-amber-950 tracking-tight leading-tight px-2">
+        <h2 className="font-display font-extrabold text-2xl md:text-3xl text-amber-950 tracking-tight leading-tight px-2 break-keep">
           &ldquo;{currentTurn.studentTarget}&rdquo;
         </h2>
 
         {/* Korean meaning */}
-        <p className="text-sm md:text-base text-slate-600 font-medium mt-2">
+        <p className="text-sm md:text-base text-slate-600 font-medium mt-2 break-keep">
           {currentTurn.studentKo}
         </p>
 
@@ -758,24 +766,24 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
                   )}
                 </div>
 
-                <p className="font-semibold text-sm mt-1 leading-snug">
+                <p className="font-semibold text-sm mt-1 leading-snug break-keep">
                   {feedback.feedbackEn}
                 </p>
-                <p className="text-xs text-slate-600 mt-1">
+                <p className="text-xs text-slate-600 mt-1 break-keep">
                   {feedback.feedbackKo}
                 </p>
 
                 {/* Specific hint visual if failure */}
                 {!feedback.success && feedback.hint && (
                   <div className="mt-2.5 p-2 bg-white rounded-lg border border-amber-200 text-xs">
-                    <span className="text-amber-800 font-bold block mb-0.5">
+                    <span className="text-amber-800 font-bold block mb-0.5 break-keep">
                       {feedback.category === 'elicitation'
                         ? '💡 힌트 (Hint):'
                         : feedback.category === 'chunking'
                         ? '✂️ 나누어 말하기 힌트 (Chunks):'
                         : '🎯 목표 문장 다시 보기:'}
                     </span>
-                    <span className="font-mono font-bold text-amber-950 text-sm">
+                    <span className="font-mono font-bold text-amber-950 text-sm break-all">
                       {feedback.hint}
                     </span>
                   </div>
@@ -787,20 +795,20 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
         {/* Action Buttons: Try Again, Next, Skip */}
         <div className="w-full flex flex-col gap-2 mt-5 pt-3 border-t border-amber-200/80">
-          <div className="w-full flex items-center justify-between gap-2">
+          <div className="w-full flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
             <button
               onClick={handleSkip}
-              className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-white/80 rounded-xl transition-colors"
+              className="flex items-center gap-1 px-3 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-white/80 rounded-xl transition-colors shrink-0"
             >
               <SkipForward className="w-3.5 h-3.5" />
               <span>건너뛰기 (Skip)</span>
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
               <button
                 onClick={handleTryAgain}
                 disabled={isSpeaking || isListening || isLoadingFeedback || attemptCount === 0}
-                className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-amber-900 bg-white hover:bg-amber-50 rounded-xl border border-amber-300 shadow-2xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-amber-900 bg-white hover:bg-amber-50 rounded-xl border border-amber-300 shadow-2xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-amber-700" />
                 <span>다시 말하기 (Try Again)</span>
@@ -816,7 +824,7 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
                     ? '3차 피드백(Chunking)까지 확인한 후 다음 단계로 이동할 수 있습니다.'
                     : undefined
                 }
-                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap ${
                   feedback?.success
                     ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
                     : 'bg-amber-600 hover:bg-amber-700 text-white'
@@ -830,12 +838,12 @@ export const PracticeScreen: React.FC<PracticeScreenProps> = ({
 
           {/* Guide messages */}
           {attemptCount === 0 && (
-            <p className="text-[11px] text-amber-900/80 text-center font-medium">
+            <p className="text-[11px] text-amber-900/80 text-center font-medium break-keep">
               🎙️ 마이크를 누르고 말해 보세요! (말하기 없이 넘어가려면 왼쪽 &apos;건너뛰기&apos;를 눌러주세요)
             </p>
           )}
           {attemptCount > 0 && feedback && !feedback.success && failureCount < 3 && (
-            <p className="text-[11px] text-amber-900/80 text-center font-medium">
+            <p className="text-[11px] text-amber-900/80 text-center font-medium break-keep">
               💡 &apos;다시 말하기&apos;를 눌러 3차 피드백까지 연습을 완료하거나 &apos;건너뛰기&apos;를 눌러주세요. ({failureCount}/3단계 피드백 진행 중)
             </p>
           )}

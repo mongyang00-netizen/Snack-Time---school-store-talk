@@ -28,7 +28,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Scrollable Content */}
-        <div className="p-6 overflow-y-auto space-y-5 text-sm text-slate-700">
+        <div className="p-6 overflow-y-auto space-y-5 text-sm text-slate-700 break-keep">
           <div>
             <h4 className="font-bold text-slate-900 flex items-center gap-1.5 mb-1">
               <Sparkles className="w-4 h-4 text-amber-600" />
@@ -37,7 +37,7 @@ export const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
             <p className="text-xs text-slate-600 leading-relaxed">
               &quot;Give me...&quot; 와 같은 지나치게 직설적인 표현 대신,
               <strong> &quot;Can I have... please?&quot;</strong> 처럼 공손하고 자연스러운 표현을 익혀
-              학교 매점에서 간식을 직접 구매할 수 있습니다. (CEFR A1-A2 수준)
+              학교 매점에서 간식을 직접 구매할 수 있습니다.
             </p>
           </div>
 
