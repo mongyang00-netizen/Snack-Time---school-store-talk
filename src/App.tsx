@@ -3,23 +3,28 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { StartScreen } from './components/StartScreen';
 import { PracticeScreen } from './components/PracticeScreen';
 import { ResultScreen } from './components/ResultScreen';
 import { BrowserNoticeModal } from './components/BrowserNoticeModal';
 import { HelpModal } from './components/HelpModal';
+import { LoginModal } from './components/LoginModal';
 import { DIALOGUE_DATA, TurnRecord } from './data/dialogueData';
+import { useAuth } from './contexts/AuthContext';
 
 type ScreenType = 'start' | 'practice' | 'result';
 
 export default function App() {
+  const { isAuthenticated } = useAuth();
   const [screen, setScreen] = useState<ScreenType>('start');
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [records, setRecords] = useState<TurnRecord[]>([]);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isBrowserNoticeOpen, setIsBrowserNoticeOpen] = useState(false);
+  const prevAuthRef = useRef(isAuthenticated);
 
   // Browser environmental checks
   const [inAppBrowser, setInAppBrowser] = useState(false);
@@ -43,6 +48,15 @@ export default function App() {
       }
     }
   }, []);
+
+  // When login completes, close login popup and navigate to main page
+  useEffect(() => {
+    if (!prevAuthRef.current && isAuthenticated) {
+      setIsLoginOpen(false);
+      setScreen('start');
+    }
+    prevAuthRef.current = isAuthenticated;
+  }, [isAuthenticated]);
 
   const handleStartShopping = () => {
     setRecords([]);
@@ -91,6 +105,7 @@ export default function App() {
         currentScreen={screen}
         onNavigateStart={() => setScreen('start')}
         onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenLogin={() => setIsLoginOpen(true)}
       />
 
       {/* Main Content Viewport */}
@@ -128,7 +143,8 @@ export default function App() {
       />
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      <LoginModal isOpen={isLoginOpen} onClose={() => setIsLoginOpen(false)} />
     </div>
   );
 }
-
